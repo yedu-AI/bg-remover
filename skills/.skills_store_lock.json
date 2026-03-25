@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "codex": {
+      "name": "Codex",
+      "zip_url": "https://lightmake.site/api/v1/download?slug=codex",
+      "source": "skillhub",
+      "version": "1.0.0"
+    },
+    "openai-whisper": {
+      "name": "Openai Whisper",
+      "zip_url": "https://lightmake.site/api/v1/download?slug=openai-whisper",
+      "source": "skillhub",
+      "version": "1.0.0"
+    }
+  }
+}

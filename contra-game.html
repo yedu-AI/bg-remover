@@ -1,0 +1,1347 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>魂斗罗 - Contra 第一关</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Press Start 2P', monospace;
+            overflow: hidden;
+        }
+        
+        #gameContainer {
+            position: relative;
+            border: 4px solid #444;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.3);
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+        
+        #gameCanvas {
+            display: block;
+            background: #000;
+        }
+        
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 50px;
+            padding: 10px 15px;
+            color: #fff;
+            font-size: 14px;
+            text-shadow: 2px 2px 0 #000;
+            pointer-events: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
+        }
+        
+        #ui-left, #ui-right {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+        
+        #score, #lives, #weapon {
+            font-size: 12px;
+            letter-spacing: 1px;
+        }
+        
+        #lives {
+            color: #ff0;
+        }
+        
+        #weapon {
+            color: #0ff;
+        }
+        
+        #startScreen, #gameOver {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            z-index: 10;
+        }
+        
+        #startScreen h1, #gameOver h1 {
+            font-size: 42px;
+            margin-bottom: 30px;
+            color: #ff0;
+            text-shadow: 4px 4px 0 #f00, 6px 6px 0 #000;
+            animation: pulse 1s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        #startScreen p, #gameOver p {
+            font-size: 14px;
+            margin: 8px 0;
+            color: #0ff;
+        }
+        
+        .controls {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 11px;
+            color: #888;
+            line-height: 1.8;
+        }
+        
+        .controls span {
+            color: #ff0;
+            font-size: 13px;
+        }
+        
+        #startBtn, #restartBtn {
+            margin-top: 30px;
+            padding: 15px 50px;
+            font-size: 16px;
+            font-family: 'Press Start 2P', monospace;
+            background: linear-gradient(to bottom, #f00 0%, #a00 100%);
+            color: #fff;
+            border: 3px solid #ff0;
+            cursor: pointer;
+            text-shadow: 2px 2px 0 #000;
+            transition: all 0.2s;
+        }
+        
+        #startBtn:hover, #restartBtn:hover {
+            background: linear-gradient(to bottom, #ff0 0%, #aa0 100%);
+            color: #f00;
+            transform: scale(1.05);
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        #finalScore {
+            color: #ff0;
+            font-size: 24px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="512" height="480"></canvas>
+        
+        <div id="ui">
+            <div id="ui-left">
+                <div id="score">SCORE: 000000</div>
+                <div id="weapon">M</div>
+            </div>
+            <div id="ui-right">
+                <div id="lives">❤❤❤</div>
+            </div>
+        </div>
+        
+        <div id="startScreen">
+            <h1>CONTRA</h1>
+            <p>魂斗罗 - 第一关</p>
+            <div class="controls">
+                <span>← →</span> : 移动<br>
+                <span>↑</span> : 跳跃<br>
+                <span>↓</span> : 趴下<br>
+                <span>Z</span> : 射击<br>
+                <span>X</span> : 跳跃
+            </div>
+            <button id="startBtn">开始游戏</button>
+        </div>
+        
+        <div id="gameOver" class="hidden">
+            <h1>GAME OVER</h1>
+            <p>最终得分</p>
+            <div id="finalScore">0</div>
+            <button id="restartBtn">重新开始</button>
+        </div>
+    </div>
+
+    <script>
+        // 画布设置
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // NES调色板
+        const PALETTE = {
+            black: '#000000',
+            white: '#FFFFFF',
+            red: '#FC1F49',
+            darkRed: '#A00018',
+            blue: '#2024FC',
+            lightBlue: '#787CFC',
+            cyan: '#0438FC',
+            green: '#00F838',
+            darkGreen: '#007838',
+            yellow: '#FCE838',
+            orange: '#F87800',
+            brown: '#585838',
+            gray: '#787878',
+            darkGray: '#383838',
+            lightGray: '#B8B8B8',
+            purple: '#7838FC',
+            pink: '#F8B8F8'
+        };
+        
+        // 游戏状态
+        let gameState = {
+            running: false,
+            paused: false,
+            score: 0,
+            lives: 3,
+            screenX: 0,
+            screenY: 0,
+            level: 1,
+            weapon: 'M', // M: 机枪, S: 散弹, L: 激光, R: 快速
+            frameCount: 0,
+            nextWaveIndex: 0,
+            section: '丛林突入',
+            message: '',
+            messageTimer: 0,
+            missionCleared: false
+        };
+        
+        // 按键状态
+        const keys = {
+            left: false,
+            right: false,
+            up: false,
+            down: false,
+            shoot: false,
+            jump: false
+        };
+        
+        // 玩家对象
+        const player = {
+            x: 100,
+            y: 400,
+            width: 16,
+            height: 32,
+            vx: 0,
+            vy: 0,
+            speed: 2.5,
+            jumpPower: -9,
+            gravity: 0.6,
+            maxFallSpeed: 12,
+            grounded: false,
+            direction: 1, // 1: 右, -1: 左
+            state: 'stand', // stand, run, jump, crouch
+            shootCooldown: 0,
+            invincible: 0,
+            animFrame: 0,
+            crouching: false
+        };
+        
+        // 子弹数组
+        let bullets = [];
+        
+        // 敌人数组
+        let enemies = [];
+        
+        // 爆炸效果
+        let explosions = [];
+
+        // 武器掉落
+        let weaponDrops = [];
+        
+        // 关卡数据
+        const level = {
+            width: 3000,
+            height: 480,
+            gravity: 0.5
+        };
+        
+        // 平台数据（精确还原第一关）
+        const platforms = [
+            // 地面
+            { x: 0, y: 432, width: 5000, height: 48, type: 'ground', color: PALETTE.darkGray },
+            
+            // 第一部分平台
+            { x: 256, y: 368, width: 64, height: 16, type: 'platform', color: PALETTE.brown },
+            { x: 384, y: 304, width: 64, height: 16, type: 'platform', color: PALETTE.brown },
+            { x: 512, y: 240, width: 64, height: 16, type: 'platform', color: PALETTE.brown },
+            
+            // 中间部分
+            { x: 640, y: 336, width: 96, height: 16, type: 'platform', color: PALETTE.brown },
+            { x: 800, y: 272, width: 64, height: 16, type: 'platform', color: PALETTE.brown },
+            { x: 960, y: 208, width: 80, height: 16, type: 'platform', color: PALETTE.brown },
+            
+            // 后半部分
+            { x: 1152, y: 304, width: 64, height: 16, type: 'platform', color: PALETTE.brown },
+            { x: 1344, y: 368, width: 96, height: 16, type: 'platform', color: PALETTE.brown },
+            { x: 1536, y: 272, width: 64, height: 16, type: 'platform', color: PALETTE.brown },
+            { x: 1728, y: 336, width: 80, height: 16, type: 'platform', color: PALETTE.brown }
+        ];
+
+        // 关卡分段
+        const stageSections = [
+            { x: 0, name: '丛林突入' },
+            { x: 900, name: '峭壁火线' },
+            { x: 1800, name: '桥头封锁' },
+            { x: 2500, name: '基地前哨' }
+        ];
+
+        const stageCheckpoints = [100, 980, 1860, 2480];
+
+        // 关卡波次脚本
+        const stageWaves = [
+            { trigger: 120, label: '敌军接触', types: ['runner', 'runner'] },
+            { trigger: 350, label: '火力压制', types: ['runner', 'shooter', 'runner'] },
+            { trigger: 620, label: '高台守卫', types: ['shooter', 'runner', 'turret'] },
+            { trigger: 920, label: '跳跃突击', types: ['jumper', 'runner', 'shooter'] },
+            { trigger: 1240, label: '交叉火网', types: ['turret', 'runner', 'jumper'] },
+            { trigger: 1560, label: '桥头遭遇', types: ['runner', 'runner', 'shooter', 'turret'] },
+            { trigger: 1880, label: '机动小队', types: ['jumper', 'jumper', 'runner'] },
+            { trigger: 2200, label: '前哨防线', types: ['turret', 'shooter', 'runner'] },
+            { trigger: 2520, label: '最终阻击', types: ['turret', 'jumper', 'runner', 'shooter'] }
+        ];
+        
+        // 水面
+        const water = {
+            y: 448,
+            height: 32,
+            speed: 0.5
+        };
+        
+        // 背景层
+        const backgrounds = {
+            sky: { color: '#6B8CFF' },
+            mountains: [],
+            trees: [],
+            buildings: []
+        };
+        
+        // 初始化背景
+        function initBackground() {
+            backgrounds.mountains = [];
+            backgrounds.trees = [];
+
+            // 山脉
+            for (let i = 0; i < 15; i++) {
+                backgrounds.mountains.push({
+                    x: i * 256,
+                    height: 80 + Math.random() * 60,
+                    color: PALETTE.darkGray
+                });
+            }
+            
+            // 树木
+            for (let i = 0; i < 40; i++) {
+                backgrounds.trees.push({
+                    x: i * 96,
+                    type: Math.floor(Math.random() * 3)
+                });
+            }
+        }
+        
+        function showMessage(text, duration = 140) {
+            gameState.message = text;
+            gameState.messageTimer = duration;
+        }
+
+        function getGroundYAtX(x, width, height) {
+            let topY = 432; // 默认地面高度
+            for (const plat of platforms) {
+                const overlaps = x + width > plat.x && x < plat.x + plat.width;
+                if (overlaps && plat.y < topY) {
+                    topY = plat.y;
+                }
+            }
+            return topY - height;
+        }
+
+        function getRespawnX() {
+            let checkpoint = stageCheckpoints[0];
+            for (const point of stageCheckpoints) {
+                if (player.x >= point) checkpoint = point;
+            }
+            return checkpoint;
+        }
+
+        function spawnEnemyByType(type, x) {
+            if (enemies.length >= 12) return;
+            const spawnX = Math.min(level.width - 80, Math.max(120, x));
+
+            if (type === 'runner') {
+                enemies.push({
+                    x: spawnX,
+                    y: getGroundYAtX(spawnX, 16, 32),
+                    width: 16,
+                    height: 32,
+                    vx: -1.2,
+                    vy: 0,
+                    type: 'runner',
+                    health: 1,
+                    animFrame: 0,
+                    shootTimer: 0,
+                    jumpTimer: 0,
+                    grounded: true,
+                    direction: -1
+                });
+            } else if (type === 'shooter') {
+                enemies.push({
+                    x: spawnX,
+                    y: getGroundYAtX(spawnX, 16, 32),
+                    width: 16,
+                    height: 32,
+                    vx: 0,
+                    vy: 0,
+                    type: 'shooter',
+                    health: 2,
+                    animFrame: 0,
+                    shootTimer: 60 + Math.floor(Math.random() * 30),
+                    grounded: true,
+                    direction: -1
+                });
+            } else if (type === 'jumper') {
+                enemies.push({
+                    x: spawnX,
+                    y: getGroundYAtX(spawnX, 16, 30),
+                    width: 16,
+                    height: 30,
+                    vx: -1.4,
+                    vy: 0,
+                    type: 'jumper',
+                    health: 2,
+                    animFrame: 0,
+                    shootTimer: 0,
+                    jumpTimer: 45 + Math.floor(Math.random() * 30),
+                    grounded: true,
+                    direction: -1
+                });
+            } else {
+                enemies.push({
+                    x: spawnX,
+                    y: getGroundYAtX(spawnX, 24, 32),
+                    width: 24,
+                    height: 32,
+                    vx: 0,
+                    vy: 0,
+                    type: 'turret',
+                    health: 4,
+                    animFrame: 0,
+                    shootTimer: 80,
+                    grounded: true,
+                    direction: -1
+                });
+            }
+        }
+
+        function spawnWave(wave) {
+            const baseX = Math.max(player.x + 360, wave.trigger + 180);
+            wave.types.forEach((type, index) => {
+                spawnEnemyByType(type, baseX + index * 70);
+            });
+            showMessage(`WAVE ${gameState.nextWaveIndex + 1}: ${wave.label}`);
+        }
+
+        // 回退随机刷怪（脚本刷怪触发失败时兜底）
+        function spawnEnemy() {
+            const list = ['runner', 'runner', 'shooter', 'jumper', 'turret'];
+            const type = list[Math.floor(Math.random() * list.length)];
+            spawnEnemyByType(type, gameState.screenX + 620 + Math.random() * 120);
+        }
+
+        function applyWeapon(weapon) {
+            gameState.weapon = weapon;
+            showMessage(`获得武器: ${weapon}`);
+        }
+
+        function spawnWeaponDrop(x, y) {
+            const dropPool = ['S', 'L', 'R'];
+            const weapon = dropPool[Math.floor(Math.random() * dropPool.length)];
+            weaponDrops.push({
+                x: x - 7,
+                y: y - 12,
+                width: 14,
+                height: 14,
+                vy: -2,
+                life: 900,
+                blink: 0,
+                weapon: weapon
+            });
+        }
+        
+        // 创建爆炸
+        function createExplosion(x, y) {
+            explosions.push({
+                x: x,
+                y: y,
+                frame: 0,
+                maxFrames: 20
+            });
+        }
+        
+        // 精确的碰撞检测
+        function checkCollision(a, b) {
+            return a.x < b.x + b.width &&
+                   a.x + a.width > b.x &&
+                   a.y < b.y + b.height &&
+                   a.y + a.height > b.y;
+        }
+
+        function landEntity(entity, previousY) {
+            const previousBottom = previousY + entity.height;
+            const currentBottom = entity.y + entity.height;
+            let landingTop = null;
+
+            for (const plat of platforms) {
+                const overlapsHorizontally =
+                    entity.x + entity.width > plat.x &&
+                    entity.x < plat.x + plat.width;
+
+                if (!overlapsHorizontally || entity.vy < 0) continue;
+
+                const crossedTop =
+                    previousBottom <= plat.y &&
+                    currentBottom >= plat.y;
+                const onTop = Math.abs(currentBottom - plat.y) < 0.01;
+
+                if ((crossedTop || onTop) &&
+                    (landingTop === null || plat.y < landingTop)) {
+                    landingTop = plat.y;
+                }
+            }
+
+            if (landingTop !== null) {
+                entity.y = landingTop - entity.height;
+                entity.vy = 0;
+                entity.grounded = true;
+            } else {
+                entity.grounded = false;
+            }
+        }
+        
+        // 更新玩家
+        function updatePlayer() {
+            const previousHeight = player.height;
+
+            // 水平移动
+            if (keys.left) {
+                player.vx = -player.speed;
+                player.direction = -1;
+                if (player.grounded) player.state = 'run';
+            } else if (keys.right) {
+                player.vx = player.speed;
+                player.direction = 1;
+                if (player.grounded) player.state = 'run';
+            } else {
+                player.vx *= 0.8; // 摩擦力
+                if (Math.abs(player.vx) < 0.1) player.vx = 0;
+                if (player.grounded) player.state = 'stand';
+            }
+            
+            // 趴下
+            if (keys.down && player.grounded) {
+                player.crouching = true;
+                player.height = 16;
+                player.state = 'crouch';
+            } else {
+                player.crouching = false;
+                player.height = 32;
+            }
+
+            // 切换站立/趴下时保持脚底位置不变，避免角色视觉上悬空
+            if (player.grounded && player.height !== previousHeight) {
+                player.y += previousHeight - player.height;
+            }
+            
+            // 跳跃
+            if (keys.jump && player.grounded && !player.crouching) {
+                player.vy = player.jumpPower;
+                player.grounded = false;
+                player.state = 'jump';
+                keys.jump = false;
+            }
+            
+            // 应用重力
+            player.vy += level.gravity;
+            
+            // 限制最大下落速度
+            if (player.vy > player.maxFallSpeed) {
+                player.vy = player.maxFallSpeed;
+            }
+            
+            // 更新位置
+            const previousY = player.y;
+            player.x += player.vx;
+            player.y += player.vy;
+            
+            // 边界检查
+            if (player.x < 0) player.x = 0;
+            if (player.x > level.width - player.width) player.x = level.width - player.width;
+            
+            // 平台碰撞检测
+            player.grounded = false;
+            
+            // 先检测是否掉出地图
+            if (player.y > 550) {
+                playerHit();
+                return;
+            }
+            
+            // 地面/平台碰撞：使用上一帧/当前帧底边检测落点，保证稳定落地
+            const previousBottom = previousY + player.height;
+            const currentBottom = player.y + player.height;
+            let landingTop = null;
+
+            for (let plat of platforms) {
+                const overlapsHorizontally =
+                    player.x + player.width > plat.x &&
+                    player.x < plat.x + plat.width;
+
+                if (!overlapsHorizontally || player.vy < 0) {
+                    continue;
+                }
+
+                const platTop = plat.y;
+                const crossedPlatformTop =
+                    previousBottom <= platTop &&
+                    currentBottom >= platTop;
+                const alreadyStandingOnTop =
+                    Math.abs(currentBottom - platTop) < 0.01;
+
+                if ((crossedPlatformTop || alreadyStandingOnTop) &&
+                    (landingTop === null || platTop < landingTop)) {
+                    landingTop = platTop;
+                }
+            }
+
+            if (landingTop !== null) {
+                player.y = landingTop - player.height;
+                player.vy = 0;
+                player.grounded = true;
+            }
+            
+            // 射击冷却
+            if (player.shootCooldown > 0) player.shootCooldown--;
+            
+            // 射击
+            if (keys.shoot && player.shootCooldown === 0) {
+                const bulletSpeed = gameState.weapon === 'R' ? 7 : 6;
+                
+                if (gameState.weapon === 'M') {
+                    // 机枪：单发
+                    bullets.push({
+                        x: player.x + (player.direction === 1 ? player.width : -8),
+                        y: player.y + (player.crouching ? 6 : 12),
+                        width: 8,
+                        height: 4,
+                        vx: player.direction * bulletSpeed,
+                        damage: 1,
+                        weapon: 'M',
+                        enemy: false
+                    });
+                    player.shootCooldown = 8;
+                } else if (gameState.weapon === 'S') {
+                    // 散弹：三发
+                    for (let i = -1; i <= 1; i++) {
+                        bullets.push({
+                            x: player.x + (player.direction === 1 ? player.width : -8),
+                            y: player.y + (player.crouching ? 6 : 12),
+                            width: 8,
+                            height: 4,
+                            vx: player.direction * bulletSpeed,
+                            vy: i * 1.5,
+                            damage: 1,
+                            weapon: 'S',
+                            enemy: false
+                        });
+                    }
+                    player.shootCooldown = 15;
+                } else if (gameState.weapon === 'L') {
+                    // 激光：穿透
+                    bullets.push({
+                        x: player.x + (player.direction === 1 ? player.width : -20),
+                        y: player.y + (player.crouching ? 6 : 12),
+                        width: 20,
+                        height: 4,
+                        vx: player.direction * bulletSpeed,
+                        damage: 2,
+                        weapon: 'L',
+                        enemy: false,
+                        piercing: true
+                    });
+                    player.shootCooldown = 12;
+                } else if (gameState.weapon === 'R') {
+                    bullets.push({
+                        x: player.x + (player.direction === 1 ? player.width : -8),
+                        y: player.y + 10,
+                        width: 7,
+                        height: 3,
+                        vx: player.direction * bulletSpeed,
+                        damage: 1,
+                        weapon: 'R',
+                        enemy: false
+                    });
+                    bullets.push({
+                        x: player.x + (player.direction === 1 ? player.width : -8),
+                        y: player.y + 14,
+                        width: 7,
+                        height: 3,
+                        vx: player.direction * bulletSpeed,
+                        damage: 1,
+                        weapon: 'R',
+                        enemy: false
+                    });
+                    player.shootCooldown = 5;
+                }
+            }
+            
+            // 无敌时间
+            if (player.invincible > 0) player.invincible--;
+            
+            // 动画帧
+            if (gameState.frameCount % 8 === 0 && player.state === 'run') {
+                player.animFrame = (player.animFrame + 1) % 4;
+            }
+            
+            // 屏幕滚动（经典卷轴）
+            const targetScreenX = player.x - 200;
+            if (targetScreenX > gameState.screenX) {
+                gameState.screenX = targetScreenX;
+            }
+            if (gameState.screenX < 0) gameState.screenX = 0;
+            if (gameState.screenX > level.width - canvas.width) {
+                gameState.screenX = level.width - canvas.width;
+            }
+        }
+        
+        // 更新子弹
+        function updateBullets() {
+            bullets = bullets.filter(bullet => {
+                bullet.x += bullet.vx;
+                if (bullet.vy) bullet.y += bullet.vy;
+                
+                // 检查是否在屏幕内
+                if (bullet.x < gameState.screenX - 50 || 
+                    bullet.x > gameState.screenX + canvas.width + 50) {
+                    return false;
+                }
+                
+                if (bullet.enemy) {
+                    // 敌人子弹检测玩家碰撞
+                    if (player.invincible === 0 && checkCollision(bullet, player)) {
+                        playerHit();
+                        return false;
+                    }
+                } else {
+                    // 玩家子弹检测敌人碰撞
+                    for (let enemy of enemies) {
+                        if (checkCollision(bullet, enemy)) {
+                            enemy.health -= bullet.damage;
+                            
+                            if (!bullet.piercing) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+                
+                return true;
+            });
+        }
+        
+        // 更新敌人
+        function updateEnemies() {
+            enemies = enemies.filter(enemy => {
+                const dx = player.x - enemy.x;
+                enemy.direction = dx >= 0 ? 1 : -1;
+
+                if (enemy.type === 'runner' || enemy.type === 'jumper') {
+                    const previousY = enemy.y;
+                    const speed = enemy.type === 'jumper' ? 1.45 : 1.25;
+                    enemy.vx = enemy.direction * speed;
+                    enemy.x += enemy.vx;
+
+                    enemy.vy += level.gravity;
+                    enemy.y += enemy.vy;
+                    landEntity(enemy, previousY);
+
+                    if (enemy.type === 'jumper') {
+                        enemy.jumpTimer--;
+                        if (enemy.grounded && enemy.jumpTimer <= 0 && Math.abs(dx) < 260) {
+                            enemy.vy = -8.2;
+                            enemy.grounded = false;
+                            enemy.jumpTimer = 45 + Math.floor(Math.random() * 25);
+                        }
+                    }
+                } else if (enemy.type === 'shooter') {
+                    enemy.shootTimer--;
+                    if (enemy.shootTimer <= 0 && Math.abs(dx) < 320) {
+                        enemy.shootTimer = 78;
+                        const dist = Math.max(1, Math.abs(dx));
+                        bullets.push({
+                            x: enemy.x + (enemy.direction === 1 ? enemy.width : -8),
+                            y: enemy.y + 13,
+                            width: 8,
+                            height: 4,
+                            vx: enemy.direction * 4.2,
+                            vy: ((player.y + 12) - (enemy.y + 12)) / dist * 3,
+                            damage: 1,
+                            weapon: 'E',
+                            enemy: true
+                        });
+                    }
+                } else if (enemy.type === 'turret') {
+                    enemy.shootTimer--;
+                    if (enemy.shootTimer <= 0 && Math.abs(dx) < 360) {
+                        enemy.shootTimer = 58;
+                        for (let i = -1; i <= 1; i++) {
+                            bullets.push({
+                                x: enemy.x + (enemy.direction === 1 ? enemy.width : -6),
+                                y: enemy.y + 14,
+                                width: 6,
+                                height: 6,
+                                vx: enemy.direction * 4.8,
+                                vy: i * 1.8,
+                                damage: 1,
+                                weapon: 'E',
+                                enemy: true
+                            });
+                        }
+                    }
+                }
+                
+                // 检查与玩家碰撞
+                if (player.invincible === 0 && checkCollision(player, enemy)) {
+                    playerHit();
+                }
+                
+                // 死亡检测
+                if (enemy.health <= 0) {
+                    createExplosion(enemy.x + enemy.width/2, enemy.y + enemy.height/2);
+                    gameState.score += enemy.type === 'turret' ? 300 : 120;
+                    if (Math.random() < (enemy.type === 'turret' ? 0.45 : 0.2)) {
+                        spawnWeaponDrop(enemy.x + enemy.width / 2, enemy.y + 6);
+                    }
+                    return false;
+                }
+                
+                return enemy.x > gameState.screenX - 180 &&
+                    enemy.x < gameState.screenX + canvas.width + 450;
+            });
+        }
+
+        function updateWeaponDrops() {
+            weaponDrops = weaponDrops.filter(drop => {
+                const previousY = drop.y;
+                drop.vy += 0.35;
+                if (drop.vy > 6) drop.vy = 6;
+                drop.y += drop.vy;
+                drop.life--;
+                drop.blink++;
+                landEntity(drop, previousY);
+
+                if (drop.life <= 0) {
+                    return false;
+                }
+
+                if (checkCollision(drop, player)) {
+                    applyWeapon(drop.weapon);
+                    return false;
+                }
+
+                return drop.x > gameState.screenX - 80;
+            });
+        }
+
+        function updateStageFlow() {
+            while (
+                gameState.nextWaveIndex < stageWaves.length &&
+                player.x >= stageWaves[gameState.nextWaveIndex].trigger
+            ) {
+                spawnWave(stageWaves[gameState.nextWaveIndex]);
+                gameState.nextWaveIndex++;
+            }
+
+            for (let i = stageSections.length - 1; i >= 0; i--) {
+                if (player.x >= stageSections[i].x) {
+                    gameState.section = stageSections[i].name;
+                    break;
+                }
+            }
+
+            if (!gameState.missionCleared && player.x >= level.width - 120) {
+                missionClear();
+            }
+
+            if (gameState.messageTimer > 0) {
+                gameState.messageTimer--;
+            }
+
+            // 兜底刷怪，避免流程真空
+            if (gameState.frameCount % 240 === 0 && enemies.length < 2 && !gameState.missionCleared) {
+                spawnEnemy();
+            }
+        }
+        
+        // 玩家受伤
+        function playerHit() {
+            if (player.invincible > 0) return;
+            
+            gameState.lives--;
+            player.invincible = 120;
+            createExplosion(player.x + player.width/2, player.y + player.height/2);
+            
+            if (gameState.lives <= 0) {
+                gameOver();
+            } else {
+                const respawnX = getRespawnX();
+                player.x = respawnX;
+                player.y = getGroundYAtX(respawnX, player.width, 32);
+                player.vx = 0;
+                player.vy = 0;
+                player.crouching = false;
+                player.height = 32;
+                player.grounded = true;
+                bullets = bullets.filter(b => !b.enemy);
+                gameState.weapon = 'M';
+                showMessage('受伤 - 重整队形');
+            }
+        }
+        
+        // 更新爆炸
+        function updateExplosions() {
+            explosions = explosions.filter(exp => {
+                exp.frame++;
+                return exp.frame < exp.maxFrames;
+            });
+        }
+        
+        // 绘制背景
+        function drawBackground() {
+            // 天空渐变
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#6B8CFF');
+            gradient.addColorStop(0.6, '#8CB4FF');
+            gradient.addColorStop(1, '#B8DCFF');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 绘制远山（视差滚动）
+            backgrounds.mountains.forEach(mtn => {
+                const drawX = mtn.x - gameState.screenX * 0.3;
+                if (drawX > -256 && drawX < canvas.width + 256) {
+                    ctx.fillStyle = PALETTE.darkGray;
+                    ctx.beginPath();
+                    ctx.moveTo(drawX, 432);
+                    ctx.lineTo(drawX + 128, 432 - mtn.height);
+                    ctx.lineTo(drawX + 256, 432);
+                    ctx.fill();
+                }
+            });
+            
+            // 绘制树木
+            backgrounds.trees.forEach(tree => {
+                const drawX = tree.x - gameState.screenX * 0.6;
+                if (drawX > -64 && drawX < canvas.width + 64) {
+                    ctx.fillStyle = PALETTE.darkGreen;
+                    // 树干
+                    ctx.fillRect(drawX + 12, 380, 8, 52);
+                    // 树叶
+                    ctx.fillRect(drawX, 340, 32, 40);
+                }
+            });
+        }
+        
+        // 绘制水面
+        function drawWater() {
+            const waveOffset = Math.sin(gameState.frameCount * 0.1) * 3;
+            
+            ctx.fillStyle = PALETTE.blue;
+            ctx.fillRect(0, water.y + waveOffset, canvas.width, water.height);
+            
+            // 波浪效果
+            ctx.fillStyle = PALETTE.lightBlue;
+            for (let i = 0; i < canvas.width; i += 16) {
+                const waveY = water.y + Math.sin((gameState.frameCount * 0.1) + (i * 0.1)) * 2;
+                ctx.fillRect(i, waveY, 8, 4);
+            }
+        }
+        
+        // 绘制平台
+        function drawPlatforms() {
+            platforms.forEach(plat => {
+                const drawX = plat.x - gameState.screenX;
+                
+                if (drawX > -plat.width && drawX < canvas.width) {
+                    // 主体
+                    ctx.fillStyle = plat.color;
+                    ctx.fillRect(drawX, plat.y, plat.width, plat.height);
+                    
+                    // 纹理细节
+                    ctx.fillStyle = PALETTE.black;
+                    ctx.fillRect(drawX, plat.y, plat.width, 2);
+                    ctx.fillRect(drawX, plat.y + plat.height - 2, plat.width, 2);
+                    
+                    // 平台格子
+                    ctx.fillStyle = PALETTE.gray;
+                    for (let i = 0; i < plat.width; i += 16) {
+                        ctx.fillRect(drawX + i + 2, plat.y + 4, 12, plat.height - 8);
+                    }
+                }
+            });
+        }
+        
+        // 绘制玩家（像素风格）
+        function drawPlayer() {
+            // 闪烁效果
+            if (player.invincible > 0 && Math.floor(player.invincible / 4) % 2 === 0) {
+                return;
+            }
+            
+            const drawX = player.x - gameState.screenX;
+            const bob = player.state === 'run' ? Math.sin(gameState.frameCount * 0.35) * 1.5 : 0;
+            
+            ctx.save();
+            
+            if (player.direction === -1) {
+                ctx.translate(drawX + player.width, player.y + bob);
+                ctx.scale(-1, 1);
+            } else {
+                ctx.translate(drawX, player.y + bob);
+            }
+            
+            const px = 0;
+            const py = 0;
+            const h = player.crouching ? 16 : 32;
+            
+            // 头带与头部
+            ctx.fillStyle = PALETTE.darkRed;
+            ctx.fillRect(px + 2, py + 2, 12, 4);
+            ctx.fillStyle = '#f4d5b8';
+            ctx.fillRect(px + 4, py + 4, 8, 8);
+            ctx.fillStyle = PALETTE.black;
+            ctx.fillRect(px + 8, py + 6, 2, 2);
+            
+            // 身体与护甲
+            ctx.fillStyle = PALETTE.red;
+            ctx.fillRect(px + 4, py + 11, 8, h - 11);
+            ctx.fillStyle = PALETTE.darkGray;
+            ctx.fillRect(px + 3, py + 13, 10, 3);
+
+            // 手臂与枪
+            ctx.fillStyle = '#f4d5b8';
+            ctx.fillRect(px + 10, py + (player.crouching ? 8 : 13), 3, 3);
+            ctx.fillStyle = PALETTE.gray;
+            if (player.crouching) {
+                ctx.fillRect(px + 8, py + 9, 12, 4);
+            } else {
+                ctx.fillRect(px + 8, py + 14, 12, 4);
+            }
+            
+            // 腿部动作
+            ctx.fillStyle = PALETTE.blue;
+            if (player.crouching) {
+                ctx.fillRect(px + 4, py + h - 4, 8, 4);
+            } else if (player.state === 'run') {
+                const step = Math.sin(gameState.frameCount * 0.45) * 2.5;
+                ctx.fillRect(px + 4, py + h - 8, 3, 8 + step);
+                ctx.fillRect(px + 9, py + h - 8, 3, 8 - step);
+            } else if (player.state === 'jump') {
+                ctx.fillRect(px + 4, py + h - 6, 3, 6);
+                ctx.fillRect(px + 9, py + h - 6, 3, 6);
+            } else {
+                ctx.fillRect(px + 4, py + h - 8, 3, 8);
+                ctx.fillRect(px + 9, py + h - 8, 3, 8);
+            }
+            
+            ctx.restore();
+        }
+        
+        // 绘制敌人
+        function drawEnemies() {
+            enemies.forEach(enemy => {
+                const drawX = enemy.x - gameState.screenX;
+                
+                if (drawX < -enemy.width || drawX > canvas.width) return;
+                
+                if (enemy.type === 'runner' || enemy.type === 'shooter' || enemy.type === 'jumper') {
+                    ctx.save();
+                    if (enemy.direction < 0) {
+                        ctx.translate(drawX + enemy.width, enemy.y);
+                        ctx.scale(-1, 1);
+                    } else {
+                        ctx.translate(drawX, enemy.y);
+                    }
+
+                    const bodyColor = enemy.type === 'jumper' ? '#2e9f5e' : '#3ea04f';
+                    const helmetColor = enemy.type === 'shooter' ? '#2a623a' : '#1f4e2c';
+
+                    ctx.fillStyle = helmetColor;
+                    ctx.fillRect(2, 2, 12, 7);
+                    ctx.fillStyle = '#d7b093';
+                    ctx.fillRect(4, 6, 8, 6);
+                    ctx.fillStyle = bodyColor;
+                    ctx.fillRect(4, 12, 8, 11);
+                    ctx.fillStyle = PALETTE.darkGray;
+                    ctx.fillRect(3, 14, 10, 3);
+
+                    ctx.fillStyle = PALETTE.gray;
+                    ctx.fillRect(8, enemy.type === 'shooter' ? 12 : 14, 9, 3);
+
+                    ctx.fillStyle = enemy.type === 'jumper' ? '#204a9d' : PALETTE.blue;
+                    const step = enemy.type === 'runner' ? Math.sin(gameState.frameCount * 0.45) * 2 : 0;
+                    ctx.fillRect(4, enemy.height - 8, 3, 8 + step);
+                    ctx.fillRect(9, enemy.height - 8, 3, 8 - step);
+                    ctx.restore();
+                } else if (enemy.type === 'turret') {
+                    ctx.fillStyle = '#6f6f7f';
+                    ctx.fillRect(drawX, enemy.y, enemy.width, enemy.height);
+                    ctx.fillStyle = PALETTE.darkGray;
+                    ctx.fillRect(drawX + 2, enemy.y + 4, enemy.width - 4, 6);
+                    ctx.fillRect(drawX + (enemy.direction === 1 ? 16 : -4), enemy.y + 10, 10, 8);
+
+                    const healthWidth = (enemy.health / 4) * enemy.width;
+                    ctx.fillStyle = PALETTE.red;
+                    ctx.fillRect(drawX, enemy.y - 10, healthWidth, 4);
+                }
+            });
+        }
+        
+        // 绘制子弹
+        function drawBullets() {
+            bullets.forEach(bullet => {
+                const drawX = bullet.x - gameState.screenX;
+                
+                if (bullet.enemy) {
+                    ctx.fillStyle = PALETTE.orange;
+                } else if (bullet.weapon === 'L') {
+                    ctx.fillStyle = PALETTE.cyan;
+                } else if (bullet.weapon === 'R') {
+                    ctx.fillStyle = PALETTE.white;
+                } else {
+                    ctx.fillStyle = PALETTE.yellow;
+                }
+                
+                ctx.fillRect(drawX, bullet.y, bullet.width, bullet.height);
+                
+                // 发光效果
+                ctx.fillStyle = bullet.enemy ? 
+                    'rgba(248, 120, 0, 0.5)' : 
+                    'rgba(252, 232, 56, 0.5)';
+                ctx.fillRect(drawX - 2, bullet.y - 2, bullet.width + 4, bullet.height + 4);
+            });
+        }
+
+        function drawWeaponDrops() {
+            weaponDrops.forEach(drop => {
+                const drawX = drop.x - gameState.screenX;
+                if (drawX < -20 || drawX > canvas.width + 20) return;
+
+                if (drop.life < 120 && Math.floor(drop.blink / 4) % 2 === 0) {
+                    return;
+                }
+
+                ctx.fillStyle = '#2b2b2b';
+                ctx.fillRect(drawX, drop.y, drop.width, drop.height);
+                ctx.strokeStyle = PALETTE.yellow;
+                ctx.strokeRect(drawX + 0.5, drop.y + 0.5, drop.width - 1, drop.height - 1);
+
+                ctx.fillStyle = PALETTE.yellow;
+                ctx.font = '10px monospace';
+                ctx.fillText(drop.weapon, drawX + 3, drop.y + 10);
+            });
+        }
+        
+        // 绘制爆炸
+        function drawExplosions() {
+            explosions.forEach(exp => {
+                const drawX = exp.x - gameState.screenX;
+                const size = (exp.frame / exp.maxFrames) * 32;
+                const alpha = 1 - (exp.frame / exp.maxFrames);
+                
+                ctx.globalAlpha = alpha;
+                
+                ctx.fillStyle = PALETTE.yellow;
+                ctx.beginPath();
+                ctx.arc(drawX, exp.y, size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = PALETTE.orange;
+                ctx.beginPath();
+                ctx.arc(drawX, exp.y, size * 0.7, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.globalAlpha = 1;
+            });
+        }
+        
+        // 绘制UI
+        function drawUI() {
+            document.getElementById('score').textContent = 
+                `SCORE: ${gameState.score.toString().padStart(6, '0')}`;
+            document.getElementById('weapon').textContent = `${gameState.weapon} | ${gameState.section}`;
+            document.getElementById('lives').textContent = 
+                '❤'.repeat(Math.max(0, gameState.lives));
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+            ctx.fillRect(8, 52, 190, 34);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '11px monospace';
+            const remaining = Math.max(0, Math.floor(level.width - player.x));
+            ctx.fillText(`DIST ${remaining.toString().padStart(4, '0')}`, 16, 68);
+            ctx.fillText(`WAVE ${gameState.nextWaveIndex}/${stageWaves.length}`, 16, 82);
+
+            if (gameState.messageTimer > 0 && gameState.message) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                ctx.fillRect(100, 94, 312, 26);
+                ctx.fillStyle = PALETTE.yellow;
+                ctx.font = '14px monospace';
+                ctx.fillText(gameState.message, 112, 112);
+            }
+        }
+        
+        // 游戏主循环
+        function gameLoop() {
+            if (!gameState.running) return;
+            
+            gameState.frameCount++;
+            
+            // 清空画布
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 更新
+            updatePlayer();
+            updateBullets();
+            updateEnemies();
+            updateWeaponDrops();
+            updateExplosions();
+            updateStageFlow();
+            
+            // 绘制
+            drawBackground();
+            drawPlatforms();
+            drawWater();
+            drawEnemies();
+            drawBullets();
+            drawWeaponDrops();
+            drawPlayer();
+            drawExplosions();
+            drawUI();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // 游戏结束
+        function gameOver() {
+            gameState.running = false;
+            gameState.missionCleared = false;
+            document.querySelector('#gameOver h1').textContent = 'GAME OVER';
+            document.querySelector('#gameOver p').textContent = '最终得分';
+            document.getElementById('finalScore').textContent = gameState.score;
+            document.getElementById('gameOver').classList.remove('hidden');
+        }
+
+        function missionClear() {
+            gameState.running = false;
+            gameState.missionCleared = true;
+            showMessage('MISSION COMPLETE', 180);
+            document.querySelector('#gameOver h1').textContent = 'MISSION COMPLETE';
+            document.querySelector('#gameOver p').textContent = '通关得分';
+            document.getElementById('finalScore').textContent = gameState.score;
+            document.getElementById('gameOver').classList.remove('hidden');
+        }
+        
+        // 开始游戏
+        function startGame() {
+            gameState.running = true;
+            gameState.score = 0;
+            gameState.lives = 3;
+            gameState.screenX = 0;
+            gameState.weapon = 'M';
+            gameState.frameCount = 0;
+            gameState.nextWaveIndex = 0;
+            gameState.section = stageSections[0].name;
+            gameState.message = '';
+            gameState.messageTimer = 0;
+            gameState.missionCleared = false;
+            
+            player.x = 100;
+            player.y = 400; // 432(地面y) - 32(玩家高度) = 400
+            player.vx = 0;
+            player.vy = 0;
+            player.invincible = 0;
+            player.crouching = false;
+            player.grounded = true;
+            
+            bullets = [];
+            enemies = [];
+            explosions = [];
+            weaponDrops = [];
+            
+            document.getElementById('startScreen').classList.add('hidden');
+            document.getElementById('gameOver').classList.add('hidden');
+            
+            initBackground();
+            showMessage('MISSION START');
+            gameLoop();
+        }
+        
+        // 键盘事件监听
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
+            if (e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
+            if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'x' || e.key === 'X') {
+                keys.up = true;
+                if (!e.repeat) keys.jump = true;
+            }
+            if (e.key === 'ArrowDown' || e.key === 's') keys.down = true;
+            if (e.key === 'z' || e.key === 'Z') keys.shoot = true;
+            
+            // 防止页面滚动
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+                e.preventDefault();
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = false;
+            if (e.key === 'ArrowRight' || e.key === 'd') keys.right = false;
+            if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'x' || e.key === 'X') {
+                keys.up = false;
+                keys.jump = false;
+            }
+            if (e.key === 'ArrowDown' || e.key === 's') keys.down = false;
+            if (e.key === 'z' || e.key === 'Z') keys.shoot = false;
+        });
+        
+        // 按钮事件
+        document.getElementById('startBtn').addEventListener('click', startGame);
+        document.getElementById('restartBtn').addEventListener('click', startGame);
+        
+        // 防止空格键滚动页面
+        window.addEventListener('keydown', (e) => {
+            if (e.key === ' ' && e.target === document.body) {
+                e.preventDefault();
+            }
+        });
+    </script>
+</body>
+</html>
